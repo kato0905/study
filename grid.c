@@ -6,9 +6,10 @@
 int count_element( void * , int , char ** , char ** );
 
 int element_number = -1;//テストデータのデータ数
-int RANGE = 50;//gridで区切る格子の大きさ(初期)
+int RANGE = 10;//gridで区切る格子の大きさ(初期)
 int SCOPE = 1000;//x,y座標の最大値
 int max_score_in_grid = 0;//グリッド内の最大のスコア
+
 
 
 

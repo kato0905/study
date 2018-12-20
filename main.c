@@ -10,7 +10,7 @@ int maxrs(void);
 void display(void);
 int count_element( void * , int , char ** , char ** );
 
-int GRID_RANGE = 50;//gridの幅
+int GRID_RANGE = 10;//gridの幅
 int SCOPE_RANGE;
 int maxrs_x_location;
 int maxrs_y_location;
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
   GRID_RANGE = RANGE;//display関数用(なぜかRANGEだと動かない)
   SCOPE_RANGE = SCOPE;//上に同じ
   printf("GRID_RANGE is %d\n",RANGE);
-
+  printf("SCOPE_RANGE is %d\n",SCOPE);
   maxrs();//maxrsとなる領域を見つける
   printf("maxrs_score is %f\n", maxrs_score);
   printf("maxrs_x_location is %d\n",maxrs_x_location);
