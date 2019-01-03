@@ -22,7 +22,7 @@ int SCOPE;
 
 
 int main(int argc, char *argv[]) {
-  char datafile[] = "testdata_1000.txt";//点の位置とスコアデータ
+  char datafile[] = "testdata2_1000.txt";//点の位置とスコアデータ
   //testdata.csvはうまく読み込めないが、testdata.txtは問題なく読み込める
 
   opencsv(datafile);
@@ -75,7 +75,7 @@ void display(void) {
   while(sqlite3_step(stmt) == SQLITE_ROW ){//座標を設定
     int get_x_location = sqlite3_column_int(stmt, 1);
     int get_y_location = sqlite3_column_int(stmt, 2);
-    glVertex2f((float)(get_x_location-500)*0.002,(float)(get_y_location-500)*0.002);
+    glVertex2f((float)(get_x_location-SCOPE_RANGE/2)*0.002,(float)(get_y_location-SCOPE_RANGE/2)*0.002);
   }
 	glEnd();//設定終了
 
