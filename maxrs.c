@@ -2,211 +2,161 @@
 #include <stdlib.h>
 #include <string.h>
 #include "/usr/include/sqlite3.h"
+#include <math.h>
 
-int maxrs_x_location;
-int maxrs_y_location;
-int maxrs_x_length;
-int maxrs_y_length;
-int max_score_in_grid;
-double maxrs_r;
-float maxrs_score;
-int x_length = 10;//ユーザー入力の四角形
-int y_length = 20;
+int Current_best_score[16];
+int Current_best_x_location[16];
+int Current_best_y_location[16];
+int x_length;//ユーザー入力の四角形
+int y_length;
 int RANGE;
 int SCOPE;
 
 
-int maxrs(void){
-  sqlite3 *conn = NULL;
-  sqlite3_stmt *stmt_find_total_score_in_scope = NULL;
-  sqlite3_stmt *stmt_find_total_score_in_grid = NULL;
-  int ret, i, j, decision = 0;
-  float current_maxrs_score = 0;
-  double r,now_r;
-  int x_reduction, y_reduction, current_x_length, current_y_length;
-  char find_total_score_sql[256];
-  int total_score_in_grid;
-  float alpha = 0.99999999, total_score_in_scope, current_score;
-  int x_meaning_reduction=SCOPE/RANGE*0.9,y_meaning_reduction=SCOPE/RANGE*0.9;
-  ret = sqlite3_open("study.sqlite", &conn);//SQLite3に接続
-  if(ret != SQLITE_OK){
-    printf("database is not open!\n");
-    return -1;
-  }
-  maxrs_score = 0;
-/*
-  //MaxRSの初期値として、XY座標全体を領域とした場合を求める
-  sqlite3_prepare_v2(conn, "SELECT total(score) FROM point_table;", 64, &stmt_find_total_score_in_scope, NULL);
-  while(sqlite3_step(stmt_find_total_score_in_scope) == SQLITE_ROW ){//座標を設定
-    total_score_in_scope = sqlite3_column_int(stmt_find_total_score_in_scope, 0);
-  }
-  maxrs_x_location = 0;
-  maxrs_y_location = 0;
-  maxrs_x_length = SCOPE/RANGE;
-  maxrs_y_length = SCOPE/RANGE;
-  //maxrs_score = (float)alpha/maxrs_x_length/maxrs_y_length + (1-alpha)*total_score_in_scope;
-  maxrs_score = 0;
+int maxrs(int Grid[][SCOPE/RANGE+1]){
 
+  int i, j, is;
+  double r;
+  int x_point, y_point;
+  int x_reduction, y_reduction;
+  int current_2_score=0, current_score=0, before_score=0;
+  int grid_subtraction, grid_addition;
 
-x_reduction=SCOPE/RANGE*0.9;
-y_reduction=SCOPE/RANGE*0.9;
-x_length = SCOPE/RANGE - x_reduction;//領域のx方向の大きさ
-y_length = SCOPE/RANGE - y_reduction;//領域のy方向の大きさ
-for(i=0; i<=x_reduction; i++){//x方向に動かす回数
-  for(j=0; j<=y_reduction; j++){//y方向に動かす回数
-
-    sprintf(find_total_score_sql, "select total(number) from grid_table where x_range >= %d and x_range <= %d and y_range >= %d and y_range <= %d;", 0+i, x_length+i-1, 0+j, y_length+j-1);
-    sqlite3_prepare_v2(conn, find_total_score_sql, 512, &stmt_find_total_score_in_grid, NULL);
-
-    while(sqlite3_step(stmt_find_total_score_in_grid) == SQLITE_ROW ){
-      total_score_in_grid = sqlite3_column_int(stmt_find_total_score_in_grid, 0);//現在のグリッドの合計スコア
-    }
-    current_score = (float)max_score_in_grid*alpha/x_length/y_length + (1-alpha)*total_score_in_grid;
-    if(current_score > maxrs_score){
-      x_meaning_reduction=x_reduction;
-      y_meaning_reduction=y_reduction;
+  //初めの一つを検索する
+  x_point = 0;
+  y_point = 0;
+  //r=2の時のスコアを求める
+  for(i=x_point;i<=x_point+2*x_length;i++){
+    for(j=y_point;j<=y_point+2*y_length;j++){
+      current_2_score += Grid[i][j];//r=2の時のスコアを求める
     }
   }
-}
-*/
-
-/*
-maxrs_x_location = 0;
-maxrs_y_location = 0;
-maxrs_x_length = 0;
-maxrs_y_length = 0;
-maxrs_score = 0;
-maxrs_r = 1;
-*/
-
-
-//その大きさの四角形でまずO-MaxRSを求める
-for(i=0;i<SCOPE/RANGE-x_length;i++){//x方向に動かす回数
-  for(j=0;j<SCOPE/RANGE-y_length;j++){
-    sprintf(find_total_score_sql, "select total(number) from grid_table where x_range >= %d and x_range <= %d and y_range >= %d and y_range <= %d;", 0+i, x_length+i-1, 0+j, y_length+j-1);
-    sqlite3_prepare_v2(conn, find_total_score_sql, 512, &stmt_find_total_score_in_grid, NULL);
-
-    while(sqlite3_step(stmt_find_total_score_in_grid) == SQLITE_ROW ){
-      total_score_in_grid = sqlite3_column_int(stmt_find_total_score_in_grid, 0);//現在のグリッドの合計スコア
-    }
-    if(total_score_in_grid > maxrs_score){
-      maxrs_x_location = i;
-      maxrs_y_location = j;
-      maxrs_x_length = x_length;
-      maxrs_y_length = y_length;
-      maxrs_score = total_score_in_grid;
-      maxrs_r = 1;
-    }
-  }
-}
-
-
-printf("First MaxRS::%f\n",maxrs_score);
-maxrs_score = 0;
-//上で求めたmaxrs_scoreに対して,領域をr倍して,スコアの変動を観測する.
-for(r=0.5;r<=2;r=r+0.1){
-  current_x_length = x_length * r;
-  current_y_length = y_length * r;
-  for(i=0;i<SCOPE/RANGE-current_x_length;i++){//x方向に動かす回数
-    for(j=0;j<SCOPE/RANGE-current_y_length;j++){
-      sprintf(find_total_score_sql, "select total(number) from grid_table where x_range >= %d and x_range <= %d and y_range >= %d and y_range <= %d;", 0+i, current_x_length+i-1, 0+j, current_y_length+j-1);
-      sqlite3_prepare_v2(conn, find_total_score_sql, 512, &stmt_find_total_score_in_grid, NULL);
-
-      while(sqlite3_step(stmt_find_total_score_in_grid) == SQLITE_ROW ){
-        total_score_in_grid = sqlite3_column_int(stmt_find_total_score_in_grid, 0);//現在のグリッドの合計スコア
-      }
-
-      if(total_score_in_grid > maxrs_score){
-        maxrs_x_location = i;
-        maxrs_y_location = j;
-        maxrs_x_length = current_x_length;
-        maxrs_y_length = current_y_length;
-        maxrs_score = total_score_in_grid;
-        maxrs_r = r;
-      }
-    }
-  }
-
-  //printf("R is :: %f\n",maxrs_r);
-  //printf("MaxRS score is :: %f\n",maxrs_score);
-  //printf("Rate is :: %f\n",maxrs_score/maxrs_x_length/maxrs_y_length);
-  printf("%f,%f,%f\n",maxrs_r,maxrs_score,maxrs_score/maxrs_x_length/maxrs_y_length);
-}
-printf("R is :: %f\n",maxrs_r);
-
-
-/*
-now_r = maxrs_r;
-for(r=now_r-0.1;r<=now_r+0.1;r=r+0.1){
-  current_x_length = x_length * r;
-  current_y_length = y_length * r;
-  for(i=0;i<SCOPE/RANGE-current_x_length;i++){//x方向に動かす回数
-    for(j=0;j<SCOPE/RANGE-current_y_length;j++){
-      sprintf(find_total_score_sql, "select total(number) from grid_table where x_range >= %d and x_range <= %d and y_range >= %d and y_range <= %d;", 0+i, current_x_length+i-1, 0+j, current_y_length+j-1);
-      sqlite3_prepare_v2(conn, find_total_score_sql, 512, &stmt_find_total_score_in_grid, NULL);
-
-      while(sqlite3_step(stmt_find_total_score_in_grid) == SQLITE_ROW ){
-        total_score_in_grid = sqlite3_column_int(stmt_find_total_score_in_grid, 0);//現在のグリッドの合計スコア
-      }
-
-      if(total_score_in_grid > maxrs_score*r*r){
-        printf("%f\n",r);
-        maxrs_x_location = i;
-        maxrs_y_location = j;
-        maxrs_x_length = current_x_length;
-        maxrs_y_length = current_y_length;
-        maxrs_score = total_score_in_grid;
-        maxrs_r = r;
-      }
-    }
-  }
-}
-printf("R is :: %f\n",maxrs_r);
-/*
-  //一つずつ領域を小さくしていき、最適解を求める
-  for(x_reduction=x_meaning_reduction; x_reduction<SCOPE/RANGE; x_reduction++){//x_reductionはSCOPEに比べて何マス分範囲が縮小されているか
-    for(y_reduction=y_meaning_reduction; y_reduction<SCOPE/RANGE; y_reduction++){
-
-      x_length = SCOPE/RANGE - x_reduction;//領域のx方向の大きさ
-      y_length = SCOPE/RANGE - y_reduction;//領域のy方向の大きさ
-
-      for(i=0; i<=x_reduction; i++){//x方向に動かす回数
-        for(j=0; j<=y_reduction; j++){//y方向に動かす回数
-
-          sprintf(find_total_score_sql, "select total(number) from grid_table where x_range >= %d and x_range <= %d and y_range >= %d and y_range <= %d;", 0+i, x_length+i-1, 0+j, y_length+j-1);
-          sqlite3_prepare_v2(conn, find_total_score_sql, 512, &stmt_find_total_score_in_grid, NULL);
-
-          while(sqlite3_step(stmt_find_total_score_in_grid) == SQLITE_ROW ){
-            total_score_in_grid = sqlite3_column_int(stmt_find_total_score_in_grid, 0);//現在のグリッドの合計スコア
+  Current_best_score[15] = current_2_score;
+  Current_best_x_location[15] = x_point;
+  Current_best_y_location[15] = y_point;
+  //r=0.5~1.9までを探索
+  for(is=0;is<15;is++){
+    r = 0.5+(double)is/10;
+    //範囲を動かす
+    for(y_reduction=0; y_reduction<=(2-r)*y_length; y_reduction++){
+      for(x_reduction=0; x_reduction<=(2-r)*x_length; x_reduction++){
+        //スコアを求める
+        current_score = 0;
+        if(x_reduction != 0){
+          grid_subtraction = 0;
+          grid_addition = 0;
+          for(j=y_point+y_reduction; j<=y_point+y_reduction+r*y_length; j++){
+            grid_subtraction += Grid[x_point+x_reduction-1][j];
+            grid_addition += Grid[x_point+x_reduction+(int)(r*x_length)][j];
           }
-
-          current_score = (float)max_score_in_grid*alpha/x_length/y_length + (1-alpha)*total_score_in_grid;
-
-          //現在のスコアが従来のmaxrs_scoreを超えたら行われる処理
-          if(current_score > maxrs_score){
-            maxrs_x_location = i;
-            maxrs_y_location = j;
-            maxrs_x_length = x_length;
-            maxrs_y_length = y_length;
-            maxrs_score = current_score;
+          current_score = before_score-grid_subtraction+grid_addition;
+        }else if(x_reduction == 0){
+          for(i=x_point+x_reduction;i<=x_point+x_reduction+r*x_length;i++){
+            for(j=y_point+y_reduction;j<=y_point+y_reduction+r*y_length;j++){
+              current_score += Grid[i][j];
+            }
           }
         }
-        if(decision == 1){
-          break;
+        if(Current_best_score[is] < current_score){
+          Current_best_score[is] = current_score;
+          Current_best_x_location[is] = x_point+x_reduction;
+          Current_best_y_location[is] = y_point+y_reduction;
         }
+        before_score=current_score;
       }
-      if(decision == 1){
+    }
+  }
+  current_2_score = 0;
+  current_score = 0;
+
+
+
+//次に,追加した部分のみの探索を行う
+for(y_point=0;y_point<=SCOPE/RANGE-2*y_length;y_point++){
+  for(x_point=0;x_point<=SCOPE/RANGE-2*x_length;x_point++){
+//if(x_point == 0 && y_point == 0){
+//  x_point++;
+//}
+    //探索する価値があると判断したら探索(検索範囲がS0.9より小さければ,r=0.5,~0.8を探索)
+    //r=2の時のスコアを求める
+    for(i=x_point;i<=x_point+2*x_length;i++){
+      for(j=y_point;j<=y_point+2*y_length;j++){
+        current_2_score += Grid[i][j];//r=2の時のスコアを求める
+      }
+    }
+    if(Current_best_score[15] < current_2_score){
+      Current_best_score[15] = current_2_score;
+      Current_best_x_location[15] = x_point;
+      Current_best_y_location[15] = y_point;
+    }
+
+    //r=0.5~1.9までを探索
+    for(is=0;is<15;is++){
+      if(Current_best_score[is] < current_2_score){
+        r = 0.5+(double)is/10;
+        //範囲を動かす
+        if(x_point != 0){//横に探索が広がる時(x_pointが一つ増える時)
+          for(y_reduction=0; y_reduction<=(2-r)*y_length; y_reduction++){
+            if(y_reduction == 0){//下端
+              for(i=x_point+2*x_length-(int)(r*x_length);i<=x_point+2*x_length;i++){
+                for(j=y_point+y_reduction;j<=y_point+y_reduction+r*y_length;j++){
+                  current_score += Grid[i][j];
+                }
+              }
+            }else if(y_reduction != 0){
+              grid_addition = 0;
+              grid_subtraction = 0;
+              for(i=x_point+2*x_length-(int)(r*x_length);i<=x_point+2*x_length;i++){
+                grid_addition += Grid[i][y_point+y_reduction+(int)(r*y_length)];
+                grid_subtraction += Grid[i][y_point+y_reduction-1];
+              }
+              current_score = before_score + grid_addition - grid_subtraction;
+            }
+            if(Current_best_score[is] < current_score){
+              Current_best_score[is] = current_score;
+              Current_best_x_location[is] = x_point+2*x_length-(int)(r*x_length);
+              Current_best_y_location[is] = y_point+y_reduction;
+            }
+            before_score = current_score;
+            current_score = 0;
+          }
+
+        }else if(x_point == 0){//探索が一段上がる時(y_pointが一つ増える時)
+
+          for(x_reduction=0; x_reduction<=(2-r)*x_length; x_reduction++){
+            if(x_reduction == 0){
+              for(i=x_point+x_reduction;i<=x_point+x_reduction+r*x_length;i++){
+                for(j=y_point+2*y_length-(int)(r*y_length);j<=y_point+2*y_length;j++){
+                  current_score += Grid[i][j];
+                }
+              }
+            }else if(x_reduction != 0){
+              grid_addition = 0;
+              grid_subtraction = 0;
+              for(j=y_point+2*y_length-(int)(r*y_length);j<=y_point+2*y_length;j++){
+                grid_addition = Grid[x_point+x_reduction+(int)(r*x_length)][j];
+                grid_subtraction = Grid[x_point+x_reduction-1][j];
+              }
+              current_score = before_score + grid_addition - grid_subtraction;
+            }
+            if(Current_best_score[is] < current_score){
+              Current_best_score[is] = current_score;
+              Current_best_x_location[is] = x_point+x_reduction;
+              Current_best_y_location[is] = y_point+2*y_length-(int)(r*y_length);
+            }
+            before_score = current_score;
+            current_score = 0;
+          }
+
+        }
+      }else{
+        //もうCurrent_best_scoreが更新される余地がない
         break;
       }
     }
-    if(decision == 1){
-      break;
-    }
+    current_2_score = 0;
   }
-*/
+}
 
-  sqlite3_finalize(stmt_find_total_score_in_scope);
-  sqlite3_finalize(stmt_find_total_score_in_grid);
-  sqlite3_close(conn);
   return 0;
 }
